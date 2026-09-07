@@ -5,9 +5,6 @@
 #include <WS2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 
-
-
-
 int main() {
 
 	WSAData wsa;
@@ -84,7 +81,7 @@ int main() {
 			if (!ok) { break; }
 		}
 
-		std::cout << "Client " << ip << ":" << htons(cli.sin_port) << " disconnected\n";
+		std::cout << "Client " << ip << ":" << ntohs(cli.sin_port) << " disconnected\n";
 		shutdown(client, SD_SEND);
 		closesocket(client);
 	}
