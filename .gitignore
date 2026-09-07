@@ -1,0 +1,17 @@
+.vs/
+*.vcxproj*
+*.sln
+*.user
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+out/
+build/
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.idb
+*.log
+*.tlog
