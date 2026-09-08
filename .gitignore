@@ -1,7 +1,7 @@
 .vs/
-*.vcxproj*
-*.sln
 *.user
+*.suo
+*.aps
 [Dd]ebug/
 [Rr]elease/
 x64/
