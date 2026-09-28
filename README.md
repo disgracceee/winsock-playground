@@ -77,46 +77,6 @@
 accept блокируется навсегда); используется синхронный accept, а не AcceptEx; 
 буфер на соединение фиксированный.
 
-## Сборка
-
-Из «x64 Native Tools Command Prompt for VS»:
-
-    cd 01-echo-blocking
-    cl /EHsc /std:c++17 server.cpp ws2_32.lib
-    cl /EHsc /std:c++17 client.cpp ws2_32.lib
-
-    cd 02-echo-select
-    cl /EHsc /std:c++17 echoselect.cpp ws2_32.lib
-    cl /EHsc /std:c++17 client\client.cpp ws2_32.lib
-
-    cd 03-echo-thread-per-client
-    cl /EHsc /std:c++17 server.cpp ws2_32.lib
-
-    cd 04-echo-iocp
-    cl /EHsc /std:c++20 server.cpp ws2_32.lib
-    
-    cd 05-echo-iocp-acceptex
-    cl /EHsc /std:c++20 server.cpp ws2_32.lib
-
-Библиотека также подключена через `#pragma comment(lib, "ws2_32.lib")`,
-поэтому в Visual Studio достаточно открыть `.sln` / `.slnx`.
-
-## Запуск
-
-Сначала сервер, затем клиент в отдельном окне.
-Адрес `127.0.0.1`, порт `8080` (для `04-echo-iocp` — `9000`).
-
-Проверка без клиента, из PowerShell:
-
-    $c = New-Object Net.Sockets.TcpClient('127.0.0.1', 8080)
-    $s = $c.GetStream()
-    $b = [Text.Encoding]::ASCII.GetBytes("hello`n")
-    $s.Write($b, 0, $b.Length)
-
-## Структура
-
-Каждый каталог — независимый проект. Код намеренно не выносится в общую библиотеку:
-цель — видеть полный цикл работы с сокетами в одном файле и сравнивать модели напрямую.
 ## 05-echo-iocp-acceptex
 
 Тот же IOCP, но приём соединений тоже асинхронный.
@@ -159,3 +119,44 @@ accept блокируется навсегда); используется син
 буфер на соединение фиксированный; счётчик ссылок на `Conn`
 отсутствует, поэтому одновременные Recv/Send на одном соединении
 не поддерживаются.
+
+## Сборка
+
+Из «x64 Native Tools Command Prompt for VS»:
+
+    cd 01-echo-blocking
+    cl /EHsc /std:c++17 server.cpp ws2_32.lib
+    cl /EHsc /std:c++17 client.cpp ws2_32.lib
+
+    cd 02-echo-select
+    cl /EHsc /std:c++17 echoselect.cpp ws2_32.lib
+    cl /EHsc /std:c++17 client\client.cpp ws2_32.lib
+
+    cd 03-echo-thread-per-client
+    cl /EHsc /std:c++17 server.cpp ws2_32.lib
+
+    cd 04-echo-iocp
+    cl /EHsc /std:c++20 server.cpp ws2_32.lib
+    
+    cd 05-echo-iocp-acceptex
+    cl /EHsc /std:c++20 server.cpp ws2_32.lib
+
+Библиотека также подключена через `#pragma comment(lib, "ws2_32.lib")`,
+поэтому в Visual Studio достаточно открыть `.sln` / `.slnx`.
+
+## Запуск
+
+Сначала сервер, затем клиент в отдельном окне.
+Адрес `127.0.0.1`, порт `8080` (для `04-echo-iocp` — `9000`).
+
+Проверка без клиента, из PowerShell:
+
+    $c = New-Object Net.Sockets.TcpClient('127.0.0.1', 8080)
+    $s = $c.GetStream()
+    $b = [Text.Encoding]::ASCII.GetBytes("hello`n")
+    $s.Write($b, 0, $b.Length)
+
+## Структура
+
+Каждый каталог — независимый проект. Код намеренно не выносится в общую библиотеку:
+цель — видеть полный цикл работы с сокетами в одном файле и сравнивать модели напрямую.
