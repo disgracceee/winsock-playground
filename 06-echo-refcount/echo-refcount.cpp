@@ -35,7 +35,7 @@ struct IoCtx {
     OVERLAPPED ov{};
     Op op;
 
-    IoCtx(Op o) : ov{}, op(o) {}      // без explicit: нужно для IoCtx ioRecv{ Op::Recv }
+    IoCtx(Op o) : ov{}, op(o) {}      
 };
 
 struct AcceptCtx : IoCtx {
@@ -46,9 +46,7 @@ struct AcceptCtx : IoCtx {
 };
 
 
-/* ------------------------------------------------------------------ */
-/* Conn + refcount                                                    */
-/* ------------------------------------------------------------------ */
+
 
 struct Conn {
     IoCtx ioRecv{ Op::Recv };
@@ -115,15 +113,15 @@ static bool postRecv(Conn* c) {
     c->wb.len = sizeof(c->buff);
     c->flags = 0;
 
-    addRef(c);                           // (2) ссылка на операцию
+    addRef(c);                          
 
     if (WSARecv(c->s, &c->wb, 1, NULL, &c->flags, &c->ioRecv.ov, NULL) == SOCKET_ERROR) {
         int e = WSAGetLastError();
         if (e != WSA_IO_PENDING) {
             if (e != WSAECONNRESET && e != WSAECONNABORTED && e != WSAENOTSOCK)
                 std::cerr << std::format("Error recv: {}\n", e);
-            release(c);                  // пакета в IOCP не будет
-            return false;                // closeConn зовёт вызывающий
+            release(c);                  
+            return false;                
         }
     }
     return true;
@@ -223,7 +221,7 @@ static void onAccept(AcceptCtx* a) {
         inet_ntop(AF_INET, &temp->sin_addr, ipbuf, sizeof(ipbuf));
         port = ntohs(temp->sin_port);
     }
-    const std::string ip(ipbuf);          // std::format + char[N] лучше не мешать
+    const std::string ip(ipbuf);          
 
     Conn* c = new Conn();
     c->s = sc;
@@ -252,11 +250,11 @@ static void worker() {
         LPOVERLAPPED lp = NULL;
         BOOL ok = GetQueuedCompletionStatus(g_iocp, &bytes, &key, &lp, INFINITE);
 
-        if (!lp) break;                  // порт закрыт / стоп-пакет
+        if (!lp) break;                  
 
         IoCtx* a = CONTAINING_RECORD(lp, IoCtx, ov);
 
-        /* ---- accept: свой жизненный цикл, refcount не нужен ---- */
+     
         if (a->op == Op::Accept) {
             AcceptCtx* ac = static_cast<AcceptCtx*>(a);
             if (!ok) {
@@ -271,16 +269,15 @@ static void worker() {
             continue;
         }
 
-        /* ---- recv/send: объект жив, т.к. на нём висит ссылка (2) ---- */
+        
         Conn* c = reinterpret_cast<Conn*>(key);
 
         if (!ok) {
-            // ошибка или ABORTED от CancelIoEx — просто закрываем
             closeConn(c);
         }
         else if (a->op == Op::Recv) {
             if (bytes == 0) {
-                closeConn(c);            // graceful close клиента
+                closeConn(c);           
             }
             else if (!startSend(c, bytes)) {
                 closeConn(c);
@@ -299,7 +296,7 @@ static void worker() {
             }
         }
 
-        release(c);                      // (3) ВСЕГДА: ссылка операции
+        release(c);                      
     }
 }
 // ------------------------------------------------------------------ / / main / / ------------------------------------------------------------------ /

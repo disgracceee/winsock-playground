@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="06-echo-refcount.vcxproj" />
+  <Project Path="06-echo-refcount.vcxproj" Id="bea39099-d8d0-43af-92eb-a13f3bb8a33e" />
 </Solution>
