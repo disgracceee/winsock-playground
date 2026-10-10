@@ -1,23 +1,26 @@
 
+
 # winsock-playground
 
 Пошаговое изучение Winsock2: от простейшего блокирующего эхо-сервера
-к мультиплексированию через `select()`, пулу потоков и асинхронной модели на IOCP.
+к мультиплексированию через select(), пулу потоков и асинхронной модели на IOCP.
 
-Платформа: Windows, MSVC, C++17 (`04-echo-iocp`, `05-echo-iocp-acceptex`
-и `06-echo-refcount` используют `<format>` → C++20).
+Платформа: Windows, MSVC, C++17 (04-echo-iocp, 05-echo-iocp-acceptex,
+06-echo-refcount и 07-echo-iocp-server используют <format> -> C++20).
 
 ## Проекты
 
-| Проект | Модель ввода-вывода | Клиентов одновременно | Порт |
-|---|---|---|---|
-| `01-echo-blocking` | блокирующие вызовы, один поток | 1 (последовательно) | 8080 |
-| `02-echo-select` | `select()`, неблокирующие сокеты, один поток | до `FD_SETSIZE` (1024) | 8080 |
-| `03-echo-thread-per-client` | блокирующие сокеты, поток на клиента | ограничено ресурсами ОС | 8080 |
-| `04-echo-iocp` | IOCP + `WSARecv`/`WSASend` (overlapped) | тысячи | 9000 |
-| `05-echo-iocp-acceptex` | IOCP + `AcceptEx` (полностью асинхронный) | тысячи | 5555 |
-| `06-echo-refcount` | IOCP + `AcceptEx` + счётчик ссылок на `Conn` | тысячи | 5555 |
+| Проект                  | Модель ввода-вывода                          | Клиентов одновременно       | Порт |
+|-------------------------|----------------------------------------------|-----------------------------|------|
+| 01-echo-blocking        | блокирующие вызовы, один поток               | 1 (последовательно)         | 8080 |
+| 02-echo-select          | select(), неблокирующие сокеты, один поток   | до FD_SETSIZE (1024)        | 8080 |
+| 03-echo-thread-per-client | блокирующие сокеты, поток на клиента       | ограничено ресурсами ОС     | 8080 |
+| 04-echo-iocp            | IOCP + WSARecv/WSASend (overlapped)          | тысячи                      | 9000 |
+| 05-echo-iocp-acceptex   | IOCP + AcceptEx (полностью асинхронный)      | тысячи                      | 5555 |
+| 06-echo-refcount        | IOCP + AcceptEx + счётчик ссылок на Conn     | тысячи                      | 5555 |
+| 07-echo-iocp-server     | IOCP + AcceptEx + refcount + graceful shutdown + idle timeout + статистика | тысячи | 5555 |
 
+---
 ## 01-echo-blocking
 
 Базовая схема: `socket` → `bind` → `listen` → `accept` → цикл `recv`/`send`.
@@ -151,6 +154,64 @@
 не освобождаются (вектор `accepts` только хранит указатели); `shutdown(SD_BOTH)`
 рубит и недоотправленные данные. Всё это закрывается в `07-echo-iocp-server`.
 
+
+## 07-echo-iocp-server
+
+Финальная версия: IOCP + AcceptEx + refcount + graceful shutdown
++ idle timeout + статистика. Устраняет все ограничения предыдущих проектов.
+
+### Новое по сравнению с 06
+
+- Graceful shutdown: по Ctrl+C / Ctrl+Break устанавливается g_stop,
+  закрывается слушающий сокет, все живые соединения закрываются через
+  closeConn(), воркерам отправляются NULL-пакеты
+  (PostQueuedCompletionStatus с lp = NULL) — цикл worker завершается
+  штатно, t.join() отрабатывает.
+- Idle timeout (IDLE_TIMEOUT_MS = 60 000 мс): поток reaper раз в секунду
+  проверяет lastAct каждого Conn; соединения без активности дольше порога
+  закрываются через closeConn().
+- Drain timeout (DRAIN_TIMEOUT_MS = 5 000 мс): после сигнала остановки
+  main ждёт опустошения g_liveConns и g_acceptsInFlyght не дольше 5 с,
+  затем принудительно завершает.
+- Per-thread статистика: каждый поток ведёт thread_local Stats (выровненный
+  по 64 байтам во избежание false sharing); функция aggregate() суммирует
+  все срезы. Поля: accepts, recvOps, sendOps, bytesIn, bytesOut, closes, errors.
+- Поток monitor: каждые 2 с выводит live/peak соединений, acc/s, MB/s in/out,
+  recvOps, sendOps, closes, errors.
+- Итоговая сводка: после join всех потоков печатается финальный aggregate() —
+  totals: accepts, recv, send, in/out байт, closes, errors, peak.
+- TCP_NODELAY на каждом принятом сокете.
+- BACKLOG_POSTED = 64 одновременных AcceptEx-операций.
+
+### Параметры (compile-time)
+
+| Константа        | Значение | Описание                             |
+|------------------|----------|--------------------------------------|
+| PORT             | 5555     | Порт прослушивания                   |
+| BACKLOG_POSTED   | 64       | Количество pending AcceptEx          |
+| RECV_BUF         | 4096     | Размер буфера приёма (байт)          |
+| IDLE_TIMEOUT_MS  | 60 000   | Таймаут простоя (мс)                 |
+| DRAIN_TIMEOUT_MS | 5 000    | Таймаут drain при shutdown (мс)      |
+| VERBOSE          | false    | Подробное логирование на соединение  |
+
+### Архитектура потоков
+
+    main()
+     ├── worker x (hw_concurrency x 2)  -- IOCP-цикл (Accept / Recv / Send)
+     ├── monitor                        -- вывод статистики каждые 2 с
+     └── reaper                         -- закрытие idle-соединений каждые 1 с
+
+### Жизненный цикл соединения
+
+    postAccept() -> AcceptEx -> onAccept()
+        -> CreateIoCompletionPort (attach Conn)
+        -> postRecv()
+            -> Op::Recv -> startSend() -> postSend()
+            -> Op::Send -> postSend() (частичная) | postRecv() (полная)
+        -> bytes == 0 / ошибка -> closeConn() -> release() -> delete (ref == 0)
+
+---
+
 ## Сборка
 
 Из «x64 Native Tools Command Prompt for VS»:
@@ -175,14 +236,18 @@
     cd 06-echo-refcount
     cl /EHsc /std:c++20 server.cpp ws2_32.lib
 
-Библиотека также подключена через `#pragma comment(lib, "ws2_32.lib")`,
-поэтому в Visual Studio достаточно открыть `.sln` / `.slnx`.
+    cd 07-echo-iocp-server
+    cl /EHsc /std:c++20 echo-iocp-server.cpp ws2_32.lib Mswsock.lib
+
+Библиотеки также подключены через #pragma comment(lib, ...), поэтому
+в Visual Studio достаточно открыть .sln / .slnx.
+
+---
 
 ## Запуск
 
-Сначала сервер, затем клиент в отдельном окне.
-Адрес `127.0.0.1`, порт `8080` (для `04-echo-iocp` — `9000`,
-для `05-echo-iocp-acceptex` и `06-echo-refcount` — `5555`).
+Сначала сервер, затем клиент в отдельном окне. Адрес 127.0.0.1, порт 8080
+(для 04-echo-iocp -- 9000, для 05-07 -- 5555).
 
 Проверка без клиента, из PowerShell (порт подставьте из таблицы):
 
@@ -191,7 +256,8 @@
     $b = [Text.Encoding]::ASCII.GetBytes("hello`n")
     $s.Write($b, 0, $b.Length)
 
-## Структура
+---
 
-Каждый каталог — независимый проект. Код намеренно не выносится в общую библиотеку:
-цель — видеть полный цикл работы с сокетами в одном файле и сравнивать модели напряму
+## Структура
+Каждый каталог -- независимый проект. Код намеренно не выносится в общую библиотеку: цель -- видеть полный цикл работы с 
+сокетами в одном файле и сравнивать модели напрямую.
