@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="lenght-prefixed-protocol.cpp">
+    <ClCompile Include="length-prefixed-protocol.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>
