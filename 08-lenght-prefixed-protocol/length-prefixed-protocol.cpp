@@ -152,7 +152,7 @@ static void enqueueFrame(Conn* c, const char* data, uint32_t len) {
 }
 
 static void handle_message(Conn* c, const char* str, std::size_t len) {
-	// echo-логика протокола: возвращаем тот же кадр
+	
 	enqueueFrame(c, str, static_cast<uint32_t>(len));
 
 	if constexpr (VERBOSE) {
@@ -161,7 +161,7 @@ static void handle_message(Conn* c, const char* str, std::size_t len) {
 }
 
 static bool on_data(Conn* c, const char* data, std::size_t size) {
-	if (c->buffpreflength.size() + size > MAX_INBUF) return false; // защита
+	if (c->buffpreflength.size() + size > MAX_INBUF) return false; 
 
 	c->buffpreflength.insert(c->buffpreflength.end(), data, data + size);
 
@@ -171,15 +171,15 @@ static bool on_data(Conn* c, const char* data, std::size_t size) {
 		if (available < 4) break;
 
 		uint32_t len_be = 0;
-		std::memcpy(&len_be, c->buffpreflength.data() + offset, 4); // <-- data()+offset, не [offset] через &
+		std::memcpy(&len_be, c->buffpreflength.data() + offset, 4); 
 		uint32_t len = ntohl(len_be);
 
-		if (len > MAX_PAYLOAD) return false;   // протокольная ошибка -> закрыть
+		if (len > MAX_PAYLOAD) return false;   
 		if (available < 4 + static_cast<std::size_t>(len)) break;
 
 		handle_message(c, c->buffpreflength.data() + offset + 4, len);
 
-		offset += 4 + len;                     // <-- у тебя было len + 4, ок, но порядок важен для читаемости
+		offset += 4 + len;                    
 	}
 
 	if (offset) {
