@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="07-echo-iocp-server.vcxproj" />
+  <Project Path="07-echo-iocp-server.vcxproj" Id="53574dd1-a2e8-4854-9282-563106e18f17" />
 </Solution>

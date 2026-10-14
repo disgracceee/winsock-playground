@@ -291,14 +291,14 @@ static void onAccept(AcceptCtx* ac) {
 		sockaddr* local = nullptr;
 		sockaddr* remote = nullptr;
 
-		int locallen = sizeof(local);
-		int remotelen = sizeof(remotelen);
+		int locallen = 0;
+		int remotelen = 0;
 
 		g_GetAcceptExSockAddrs(ac->buf, 0, LOCALADDRLEN, REMOTEADDRLEN, &local, &locallen, &remote, &remotelen);
 		char ipbuf[INET6_ADDRSTRLEN] = "?";
 		unsigned int port;
 		if (remote && remote->sa_family == AF_INET) {
-			sockaddr_in* r = reinterpret_cast<sockaddr_in*>(&remote);
+			sockaddr_in* r = reinterpret_cast<sockaddr_in*>(remote);
 			inet_ntop(AF_INET, &r->sin_addr, ipbuf, sizeof(ipbuf));
 			port = ntohs(r->sin_port);
 		}
